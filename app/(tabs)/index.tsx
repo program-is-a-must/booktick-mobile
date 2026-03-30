@@ -1,98 +1,230 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { useState, useCallback } from 'react';
+import {
+  View, Text, ScrollView, StyleSheet,
+  RefreshControl, ActivityIndicator
+} from 'react-native';
+import { useFocusEffect } from 'expo-router';
+import { useAuth } from '../../hooks/useAuth';
+import { apiCall } from '../../constants/api';
+import StatCard from '../../components/StatCard';
+import { colors, spacing, radius, font } from '../../constants/theme';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+export default function Dashboard() {
+  const { token, user } = useAuth();
+  const [stats, setStats]           = useState<any>(null);
+  const [challenge, setChallenge]   = useState<any>(null);
+  const [loading, setLoading]       = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-export default function HomeScreen() {
+  const fetchData = async () => {
+    const [statsRes, challengeRes] = await Promise.all([
+      apiCall('/stats', token),
+      apiCall('/challenges', token),
+    ]);
+    if (statsRes.ok)    setStats(statsRes.data);
+    if (challengeRes.ok && challengeRes.data.length > 0) {
+      setChallenge(challengeRes.data[0]);
+    }
+    setLoading(false);
+    setRefreshing(false);
+  };
+
+  useFocusEffect(useCallback(() => { fetchData(); }, [token]));
+
+  const onRefresh = () => { setRefreshing(true); fetchData(); };
+
+  const getDayLabel = (dow: number) => {
+    return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dow] ?? '';
+  };
+
+  const getBarHeight = (mins: number, maxMins: number) => {
+    if (!maxMins) return 4;
+    return Math.max(4, (mins / maxMins) * 80);
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  const totalHours   = Math.floor((stats?.total_minutes ?? 0) / 60);
+  const totalMinsRem = (stats?.total_minutes ?? 0) % 60;
+  const breakdown    = stats?.weekly_breakdown ?? [];
+  const maxMins      = Math.max(...breakdown.map((d: any) => Number(d.mins)), 1);
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+      }
+    >
+      {/* Header */}
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.greeting}>Good reading,</Text>
+          <Text style={styles.userName}>{user?.name ?? 'Reader'} 👋</Text>
+        </View>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>
+            {user?.name?.charAt(0).toUpperCase() ?? '?'}
+          </Text>
+        </View>
+      </View>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      {/* Active challenge banner */}
+      {challenge && (
+        <View style={styles.challengeBanner}>
+          <Text style={styles.challengeIcon}>🏆</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.challengeTitle}>{challenge.title}</Text>
+            <Text style={styles.challengeSub}>Goal: {challenge.daily_minutes} mins/day</Text>
+          </View>
+        </View>
+      )}
+
+      {/* Stat cards row 1 */}
+      <View style={styles.row}>
+        <StatCard
+          label="Books Read"
+          value={stats?.total_books ?? 0}
+          icon="📚"
+          color={colors.blue}
+        />
+        <StatCard
+          label="Total Minutes"
+          value={stats?.total_minutes ?? 0}
+          icon="⏱"
+          color={colors.orange}
+        />
+      </View>
+
+      {/* Stat card row 2 — full width */}
+      <View style={styles.rowFull}>
+        <StatCard
+          label="Time in Hours"
+          value={`${totalHours}h ${totalMinsRem}m`}
+          icon="🏆"
+          color={colors.purple}
+        />
+      </View>
+
+      {/* Stat cards row 3 */}
+      <View style={styles.row}>
+        <StatCard
+          label="This Week"
+          value={stats?.this_week ?? 0}
+          unit="min"
+          icon="📅"
+          color={colors.primary}
+        />
+        <StatCard
+          label="This Month"
+          value={stats?.this_month ?? 0}
+          unit="min"
+          icon="📆"
+          color="#E8733A"
+        />
+      </View>
+
+      {/* Weekly bar chart */}
+      <View style={styles.chartCard}>
+        <Text style={styles.chartTitle}>This Week</Text>
+        <View style={styles.chart}>
+          {[0, 1, 2, 3, 4, 5, 6].map((dow) => {
+            const found  = breakdown.find((d: any) => Number(d.day) === dow);
+            const mins   = found ? Number(found.mins) : 0;
+            const height = getBarHeight(mins, maxMins);
+            const isToday = new Date().getDay() === dow;
+            return (
+              <View key={dow} style={styles.barColumn}>
+                <Text style={styles.barValue}>{mins > 0 ? mins : ''}</Text>
+                <View style={styles.barTrack}>
+                  <View style={[
+                    styles.bar,
+                    { height, backgroundColor: isToday ? colors.primary : colors.primaryLight },
+                  ]} />
+                </View>
+                <Text style={[styles.barLabel, isToday && styles.barLabelToday]}>
+                  {getDayLabel(dow)}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  container: { flex: 1, backgroundColor: colors.background },
+  content:   { padding: spacing.md, paddingTop: spacing.lg + 16, paddingBottom: spacing.xl },
+  centered:  { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  greeting:  { fontSize: 14, color: colors.textMuted },
+  userName:  { fontSize: 22, fontWeight: font.bold, color: colors.text },
+  avatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: { fontSize: 18, fontWeight: font.bold, color: '#fff' },
+  challengeBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: 12,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  challengeIcon:  { fontSize: 24 },
+  challengeTitle: { fontSize: 14, fontWeight: font.bold, color: '#fff' },
+  challengeSub:   { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
+  row: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  rowFull: {
+    marginBottom: spacing.sm,
   },
+  chartCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginTop: spacing.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  chartTitle: { fontSize: 16, fontWeight: font.bold, color: colors.text, marginBottom: spacing.md },
+  chart: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    height: 120,
+  },
+  barColumn:      { flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: 4 },
+  barValue:       { fontSize: 9, color: colors.textMuted, height: 14 },
+  barTrack:       { width: '60%', height: 80, justifyContent: 'flex-end' },
+  bar:            { width: '100%', borderRadius: 4 },
+  barLabel:       { fontSize: 10, color: colors.textMuted, fontWeight: font.medium },
+  barLabelToday:  { color: colors.primary, fontWeight: font.bold },
 });
