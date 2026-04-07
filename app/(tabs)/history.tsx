@@ -6,36 +6,36 @@ import {
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
-import { apiCall } from '../../constants/api';
+import { getUserSessions, deleteSession, ReadingSession } from '../../lib/firestore';
 import { colors, spacing, radius, font } from '../../constants/theme';
-
-interface Session {
-  id:               number;
-  book_title:       string;
-  duration_minutes: number;
-  session_date:     string;
-}
 
 const cardColors = [colors.blue, colors.orange, colors.purple, colors.primary, '#E8733A'];
 
 export default function History() {
-  const { token } = useAuth();
-  const [sessions, setSessions]     = useState<Session[]>([]);
+  const { firebaseUser, loading: authLoading } = useAuth();
+  const [sessions, setSessions]     = useState<ReadingSession[]>([]);
   const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchSessions = async () => {
-    const { ok, data } = await apiCall('/sessions', token);
-    if (ok) setSessions(data);
+    if (!firebaseUser) return;
+    try {
+      const data = await getUserSessions(firebaseUser.uid);
+      setSessions(data);
+    } catch (error) {
+      console.error('Error fetching sessions:', error);
+    }
     setLoading(false);
     setRefreshing(false);
   };
 
-  useFocusEffect(useCallback(() => { fetchSessions(); }, [token]));
+  useFocusEffect(useCallback(() => {
+    if (!authLoading && firebaseUser) fetchSessions();
+  }, [firebaseUser, authLoading]));
 
   const onRefresh = () => { setRefreshing(true); fetchSessions(); };
 
-  const handleDelete = (id: number) => {
+  const handleDelete = (id: string) => {
     Alert.alert(
       'Delete Session',
       'Are you sure you want to delete this session?',
@@ -45,10 +45,10 @@ export default function History() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            const { ok } = await apiCall(`/sessions/${id}`, token, { method: 'DELETE' });
-            if (ok) {
+            try {
+              await deleteSession(id);
               setSessions(prev => prev.filter(s => s.id !== id));
-            } else {
+            } catch (error) {
               Alert.alert('Error', 'Could not delete session.');
             }
           },
@@ -70,20 +70,20 @@ export default function History() {
     return m > 0 ? `${h}h ${m}m` : `${h}h`;
   };
 
-  const renderItem = ({ item, index }: { item: Session; index: number }) => {
+  const renderItem = ({ item, index }: { item: ReadingSession; index: number }) => {
     const bgColor = cardColors[index % cardColors.length];
     return (
       <View style={[styles.sessionCard, { backgroundColor: bgColor }]}>
         <View style={styles.sessionLeft}>
           <Text style={styles.sessionTitle} numberOfLines={1}>
-            {item.book_title}
+            {item.bookTitle}
           </Text>
-          <Text style={styles.sessionDate}>{formatDate(item.session_date)}</Text>
+          <Text style={styles.sessionDate}>{formatDate(item.sessionDate)}</Text>
         </View>
         <View style={styles.sessionRight}>
-          <Text style={styles.sessionDuration}>{formatDuration(item.duration_minutes)}</Text>
+          <Text style={styles.sessionDuration}>{formatDuration(item.durationMinutes)}</Text>
           <TouchableOpacity
-            onPress={() => handleDelete(item.id)}
+            onPress={() => handleDelete(item.id!)}
             style={styles.deleteBtn}
           >
             <Text style={styles.deleteText}>✕</Text>
@@ -105,7 +105,7 @@ export default function History() {
     <View style={styles.container}>
       <FlatList
         data={sessions}
-        keyExtractor={(item) => String(item.id)}
+        keyExtractor={(item) => item.id!}
         renderItem={renderItem}
         contentContainerStyle={styles.content}
         refreshControl={

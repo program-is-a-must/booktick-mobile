@@ -8,21 +8,56 @@ import { router } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
 import { colors, spacing, radius, font } from '../../constants/theme';
 
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { auth } from '@/lib/firebase';
+
 export default function LoginScreen() {
   const { login } = useAuth();
-  const [email, setEmail]       = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading]   = useState(false);
+  const [email, setEmail]       = useState<string>('');
+  const [password, setPassword] = useState<string>('');
+  const [loading, setLoading]   = useState<boolean>(false);
 
-  const handleLogin = async () => {
+  const handleLogin = async (): Promise<void> => {
     if (!email || !password) {
       Alert.alert('Missing fields', 'Please enter your email and password.');
       return;
     }
+
     setLoading(true);
-    const { ok, data } = await login(email.trim(), password);
-    setLoading(false);
-    if (!ok) Alert.alert('Login failed', data.message || 'Something went wrong.');
+
+    const { ok, error } = await login(email.trim(), password);
+
+    if (!ok) {
+      setLoading(false);
+      Alert.alert('Login failed', error || 'Something went wrong.');
+      return;
+    }
+
+    try {
+      const uid = auth.currentUser?.uid;
+      if (!uid) throw new Error('User not found');
+
+      const userDoc = await getDoc(doc(db, 'users', uid));
+
+      setLoading(false);
+
+      if (!userDoc.exists()) {
+        Alert.alert('Error', 'User profile not found.');
+        return;
+      }
+
+      const userData = userDoc.data();
+
+      if (userData.role === 'admin') {
+        router.replace('/(admin)');
+      } else {
+        router.replace('/(tabs)');
+      }
+    } catch (e) {
+      setLoading(false);
+      Alert.alert('Error', 'Failed to load user data.');
+    }
   };
 
   return (
@@ -30,27 +65,26 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
-
-        {/* Logo */}
+      <ScrollView
+        contentContainerStyle={styles.inner}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.logoWrap}>
           <View style={styles.logoCircle}>
             <Text style={styles.logoEmoji}>📖</Text>
           </View>
         </View>
 
-        {/* Brand */}
         <Text style={styles.appName}>Book Tick</Text>
         <Text style={styles.tagline}>Track your reading journey.</Text>
 
-        {/* Card form */}
         <View style={styles.card}>
           <Text style={styles.label}>EMAIL</Text>
           <TextInput
             style={styles.input}
             value={email}
             onChangeText={setEmail}
-            placeholder="E.G. YOU@EMAIL.COM"
+            placeholder="you@example.com"
             placeholderTextColor={colors.textMuted}
             keyboardType="email-address"
             autoCapitalize="none"
@@ -86,88 +120,98 @@ export default function LoginScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+  container: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
   inner: {
     flexGrow: 1,
     justifyContent: 'center',
-    alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.xl,
   },
-  logoWrap:   { marginBottom: spacing.md },
-  logoCircle: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: colors.primaryLight,
+  logoWrap: {
     alignItems: 'center',
-    justifyContent: 'center',
+    marginBottom: spacing.lg,
   },
-  logoEmoji:  { fontSize: 40 },
+  logoCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoEmoji: {
+    fontSize: 40,
+  },
   appName: {
-    fontSize: 32,
-    fontWeight: font.bold,
-    color: colors.primary,
-    marginBottom: 6,
-    letterSpacing: -0.5,
+    fontSize: font.size.xl,
+    fontWeight: '700',
+    color: colors.text,
+    textAlign: 'center',
+    marginBottom: spacing.xs,
   },
   tagline: {
-    fontSize: 15,
+    fontSize: font.size.md,
     color: colors.textMuted,
+    textAlign: 'center',
     marginBottom: spacing.xl,
   },
   card: {
-    width: '100%',
     backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.lg,
+    marginBottom: spacing.lg,
   },
   label: {
-    fontSize: 11,
-    fontWeight: font.bold,
-    color: colors.primary,
-    letterSpacing: 1.2,
-    marginBottom: 6,
-    marginTop: spacing.sm,
+    fontSize: font.size.sm,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
   },
   input: {
-    backgroundColor: colors.background,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-    fontSize: 15,
+    paddingVertical: spacing.sm,
+    fontSize: font.size.md,
     color: colors.text,
-    marginBottom: spacing.sm,
   },
   button: {
     backgroundColor: colors.primary,
     borderRadius: radius.sm,
-    paddingVertical: 16,
+    paddingVertical: spacing.md,
+    marginTop: spacing.lg,
     alignItems: 'center',
-    marginTop: spacing.md,
   },
-  buttonDisabled: { opacity: 0.6 },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
   buttonText: {
+    fontSize: font.size.md,
+    fontWeight: '600',
     color: '#fff',
-    fontSize: 16,
-    fontWeight: font.bold,
-    letterSpacing: 0.5,
   },
-  link:     { marginTop: spacing.md, alignItems: 'center' },
-  linkText: { fontSize: 14, color: colors.textMuted },
-  linkBold: { color: colors.primary, fontWeight: font.bold },
+  link: {
+    marginTop: spacing.md,
+    alignItems: 'center',
+  },
+  linkText: {
+    fontSize: font.size.sm,
+    color: colors.textMuted,
+  },
+  linkBold: {
+    fontWeight: '600',
+    color: colors.primary,
+  },
 });

@@ -6,11 +6,11 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
-import { apiCall } from '../../constants/api';
+import { addSession } from '../../lib/firestore';
 import { colors, spacing, radius, font } from '../../constants/theme';
 
 export default function AddSession() {
-  const { token } = useAuth();
+  const { firebaseUser } = useAuth();
   const [bookTitle, setBookTitle] = useState('');
   const [duration, setDuration]   = useState('');
   const [loading, setLoading]     = useState(false);
@@ -27,19 +27,19 @@ export default function AddSession() {
       Alert.alert('Invalid duration', 'Please enter a valid number of minutes.');
       return;
     }
+    if (!firebaseUser) {
+      Alert.alert('Error', 'User not authenticated.');
+      return;
+    }
 
     setLoading(true);
-    const { ok, data } = await apiCall('/sessions', token, {
-      method: 'POST',
-      body: JSON.stringify({
-        book_title:       bookTitle.trim(),
-        duration_minutes: Number(duration),
-        session_date:     today,
-      }),
-    });
-    setLoading(false);
-
-    if (ok) {
+    try {
+      await addSession({
+        userId:          firebaseUser.uid,
+        bookTitle:       bookTitle.trim(),
+        durationMinutes: Number(duration),
+        sessionDate:     today,
+      });
       setSuccess(true);
       setBookTitle('');
       setDuration('');
@@ -47,9 +47,10 @@ export default function AddSession() {
         setSuccess(false);
         router.push('/(tabs)/history');
       }, 1500);
-    } else {
-      Alert.alert('Error', data.message || 'Could not save session.');
+    } catch (error) {
+      Alert.alert('Error', 'Could not save session. Please try again.');
     }
+    setLoading(false);
   };
 
   return (

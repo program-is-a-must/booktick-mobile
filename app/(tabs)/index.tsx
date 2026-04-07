@@ -5,31 +5,36 @@ import {
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
-import { apiCall } from '../../constants/api';
+import { getUserStats, getChallenges } from '../../lib/firestore';
 import StatCard from '../../components/StatCard';
 import { colors, spacing, radius, font } from '../../constants/theme';
 
 export default function Dashboard() {
-  const { token, user } = useAuth();
+  const { firebaseUser, loading: authLoading } = useAuth();
   const [stats, setStats]           = useState<any>(null);
   const [challenge, setChallenge]   = useState<any>(null);
   const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = async () => {
-    const [statsRes, challengeRes] = await Promise.all([
-      apiCall('/stats', token),
-      apiCall('/challenges', token),
-    ]);
-    if (statsRes.ok)    setStats(statsRes.data);
-    if (challengeRes.ok && challengeRes.data.length > 0) {
-      setChallenge(challengeRes.data[0]);
+    if (!firebaseUser) return;
+    try {
+      const [statsData, challenges] = await Promise.all([
+        getUserStats(firebaseUser.uid),
+        getChallenges(true),
+      ]);
+      setStats(statsData);
+      if (challenges.length > 0) setChallenge(challenges[0]);
+    } catch (error) {
+      console.error('Error fetching data:', error);
     }
     setLoading(false);
     setRefreshing(false);
   };
 
-  useFocusEffect(useCallback(() => { fetchData(); }, [token]));
+  useFocusEffect(useCallback(() => {
+    if (!authLoading && firebaseUser) fetchData();
+  }, [firebaseUser, authLoading]));
 
   const onRefresh = () => { setRefreshing(true); fetchData(); };
 
@@ -67,11 +72,11 @@ export default function Dashboard() {
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>Good reading,</Text>
-          <Text style={styles.userName}>{user?.name ?? 'Reader'} 👋</Text>
+          <Text style={styles.userName}>{firebaseUser?.displayName ?? 'Reader'} 👋</Text>
         </View>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>
-            {user?.name?.charAt(0).toUpperCase() ?? '?'}
+            {firebaseUser?.displayName?.charAt(0).toUpperCase() ?? '?'}
           </Text>
         </View>
       </View>

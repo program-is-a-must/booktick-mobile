@@ -6,6 +6,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../hooks/useAuth';
 import { colors, spacing, radius, font } from '../../constants/theme';
+import { router } from 'expo-router';
 
 export default function Settings() {
   const { user, logout } = useAuth();
@@ -55,13 +56,20 @@ export default function Settings() {
     return `${hour}:${min} ${period}`;
   };
 
-  const handleLogout = (): void => {
-    Alert.alert('Log out', 'Are you sure you want to log out?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Log out', style: 'destructive', onPress: logout },
-    ]);
-  };
-
+  const handleLogout = async (): Promise<void> => {
+  Alert.alert('Log out', 'Are you sure you want to log out?', [
+    { text: 'Cancel', style: 'cancel' },
+    {
+      text: 'Log out',
+      style: 'destructive',
+      onPress: async () => {
+        await logout();
+        // Force navigation back to login
+        router.replace('/(auth)/login');
+      },
+    },
+  ]);
+};
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
 

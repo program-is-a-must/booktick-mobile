@@ -5,43 +5,48 @@ import {
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
-import { apiCall } from '../../constants/api';
+import { getChallenges, getUserStats } from '../../lib/firestore';
 import { colors, spacing, radius, font } from '../../constants/theme';
 
 export default function Challenge() {
-  const { token } = useAuth();
+  const { firebaseUser, loading: authLoading } = useAuth();
   const [challenge, setChallenge]   = useState<any>(null);
   const [stats, setStats]           = useState<any>(null);
   const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = async () => {
-    const [challengeRes, statsRes] = await Promise.all([
-      apiCall('/challenges', token),
-      apiCall('/stats', token),
-    ]);
-    if (challengeRes.ok && challengeRes.data.length > 0) {
-      setChallenge(challengeRes.data[0]);
+    if (!firebaseUser) return;
+    try {
+      const [challenges, statsData] = await Promise.all([
+        getChallenges(true),
+        getUserStats(firebaseUser.uid),
+      ]);
+      if (challenges.length > 0) setChallenge(challenges[0]);
+      setStats(statsData);
+    } catch (error) {
+      console.error('Error fetching data:', error);
     }
-    if (statsRes.ok) setStats(statsRes.data);
     setLoading(false);
     setRefreshing(false);
   };
 
-  useFocusEffect(useCallback(() => { fetchData(); }, [token]));
+  useFocusEffect(useCallback(() => {
+    if (!authLoading && firebaseUser) fetchData();
+  }, [firebaseUser, authLoading]));
 
   const onRefresh = () => { setRefreshing(true); fetchData(); };
 
   const getTodayMinutes = (): number => {
-    if (!stats?.weekly_breakdown) return 0;
+    if (!stats?.weeklyBreakdown) return 0;
     const today = new Date().getDay();
-    const found = stats.weekly_breakdown.find((d: any) => Number(d.day) === today);
+    const found = stats.weeklyBreakdown.find((d: any) => Number(d.day) === today);
     return found ? Number(found.mins) : 0;
   };
 
   const getProgress = (): number => {
     if (!challenge) return 0;
-    return Math.min(1, getTodayMinutes() / challenge.daily_minutes);
+    return Math.min(1, getTodayMinutes() / challenge.dailyMinutes);
   };
 
   const formatDate = (dateStr: string) => {
@@ -70,8 +75,8 @@ export default function Challenge() {
 
   const todayMins  = getTodayMinutes();
   const progress   = getProgress();
-  const remaining  = Math.max(0, challenge.daily_minutes - todayMins);
-  const isComplete = todayMins >= challenge.daily_minutes;
+  const remaining  = Math.max(0, challenge.dailyMinutes - todayMins);
+  const isComplete = todayMins >= challenge.dailyMinutes;
   const pct        = Math.round(progress * 100);
 
   return (
@@ -99,10 +104,10 @@ export default function Challenge() {
         <Text style={styles.heroTitle}>{challenge.title}</Text>
         <View style={styles.heroMeta}>
           <View style={styles.heroBadge}>
-            <Text style={styles.heroBadgeText}>⏱ {challenge.daily_minutes} mins/day</Text>
+            <Text style={styles.heroBadgeText}>⏱ {challenge.dailyMinutes} mins/day</Text>
           </View>
           <Text style={styles.heroDates}>
-            {formatDate(challenge.start_date)} — {formatDate(challenge.end_date)}
+            {formatDate(challenge.startDate)} — {formatDate(challenge.endDate)}
           </Text>
         </View>
       </View>
@@ -133,7 +138,7 @@ export default function Challenge() {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>{challenge.daily_minutes}</Text>
+            <Text style={styles.statValue}>{challenge.dailyMinutes}</Text>
             <Text style={styles.statLabel}>daily goal</Text>
           </View>
           <View style={styles.statDivider} />
@@ -161,17 +166,17 @@ export default function Challenge() {
         <Text style={styles.overallTitle}>Overall Stats</Text>
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>{stats?.total_books ?? 0}</Text>
+            <Text style={styles.statValue}>{stats?.totalBooks ?? 0}</Text>
             <Text style={styles.statLabel}>books</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>{stats?.total_hours ?? 0}</Text>
+            <Text style={styles.statValue}>{stats?.totalHours ?? 0}</Text>
             <Text style={styles.statLabel}>hours</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>{stats?.this_week ?? 0}</Text>
+            <Text style={styles.statValue}>{stats?.thisWeek ?? 0}</Text>
             <Text style={styles.statLabel}>this week</Text>
           </View>
         </View>

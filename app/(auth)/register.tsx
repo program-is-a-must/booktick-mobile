@@ -7,8 +7,11 @@ import { router } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
 import { colors, spacing, radius, font } from '../../constants/theme';
 
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+
 export default function RegisterScreen() {
-  const { register } = useAuth();
+  const { register, user } = useAuth();
   const [name, setName]         = useState('');
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
@@ -19,14 +22,24 @@ export default function RegisterScreen() {
       Alert.alert('Missing fields', 'Please fill in all fields.');
       return;
     }
+
     if (password.length < 6) {
       Alert.alert('Weak password', 'Password must be at least 6 characters.');
       return;
     }
+
     setLoading(true);
+
     const { ok, data } = await register(name.trim(), email.trim(), password);
+
+    if (!ok) {
+      setLoading(false);
+      Alert.alert('Registration failed', data.message || 'Something went wrong.');
+      return;
+    }
+
     setLoading(false);
-    if (!ok) Alert.alert('Registration failed', data.message || 'Something went wrong.');
+    router.replace('/(tabs)');
   };
 
   return (
@@ -101,66 +114,92 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:  { flex: 1, backgroundColor: colors.background },
+  container: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
   inner: {
     flexGrow: 1,
     justifyContent: 'center',
-    alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.xl,
   },
-  logoWrap:   { marginBottom: spacing.md },
-  logoCircle: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: colors.primaryLight,
+  logoWrap: {
     alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  logoCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.primary,
     justifyContent: 'center',
+    alignItems: 'center',
   },
-  logoEmoji:  { fontSize: 40 },
+  logoEmoji: {
+    fontSize: 40,
+  },
   appName: {
-    fontSize: 32,
-    fontWeight: font.bold,
-    color: colors.primary,
-    marginBottom: 6,
-    letterSpacing: -0.5,
+    fontSize: font.size.xl,
+    fontWeight: '700',
+    color: colors.text,
+    textAlign: 'center',
+    marginBottom: spacing.xs,
   },
-  tagline:    { fontSize: 15, color: colors.textMuted, marginBottom: spacing.xl },
+  tagline: {
+    fontSize: font.size.md,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginBottom: spacing.xl,
+  },
   card: {
-    width: '100%',
     backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.lg,
+    marginBottom: spacing.lg,
   },
   label: {
-    fontSize: 11,
-    fontWeight: font.bold,
-    color: colors.primary,
-    letterSpacing: 1.2,
-    marginBottom: 6,
-    marginTop: spacing.sm,
+    fontSize: font.size.sm,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
   },
   input: {
-    backgroundColor: colors.background,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-    fontSize: 15,
+    paddingVertical: spacing.sm,
+    fontSize: font.size.md,
     color: colors.text,
-    marginBottom: spacing.sm,
   },
-  button:         { backgroundColor: colors.primary, borderRadius: radius.sm, paddingVertical: 16, alignItems: 'center', marginTop: spacing.md },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText:     { color: '#fff', fontSize: 16, fontWeight: font.bold, letterSpacing: 0.5 },
-  link:           { marginTop: spacing.md, alignItems: 'center' },
-  linkText:       { fontSize: 14, color: colors.textMuted },
-  linkBold:       { color: colors.primary, fontWeight: font.bold },
+  button: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.md,
+    marginTop: spacing.lg,
+    alignItems: 'center',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  buttonText: {
+    fontSize: font.size.md,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  link: {
+    marginTop: spacing.md,
+    alignItems: 'center',
+  },
+  linkText: {
+    fontSize: font.size.sm,
+    color: colors.textMuted,
+  },
+  linkBold: {
+    fontWeight: '600',
+    color: colors.primary,
+  },
 });
